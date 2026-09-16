@@ -8,6 +8,24 @@ tonnage par flux, par jour et par tournée.
 Application HTML standalone, sans serveur ni build : ouvrir
 `controle_exutoire.html` dans un navigateur suffit.
 
+## Variantes par agence
+
+Chaque agence a ses propres fichiers sources (colonnes, nombre d'exutoires,
+codes flux), donc chaque agence a son propre fichier HTML plutôt qu'une
+config partagée — le moteur (normalisation, agrégation, rendu) reste
+copié-adapté d'un fichier à l'autre :
+
+| Fichier | Agence | Sources |
+|---|---|---|
+| `controle_exutoire.html` | (générique) | SILEX + Sainte-Anne + Saint-Père |
+| `controle_exutoire_coved-la-riche.html` | Coved La Riche | SILEX (`Services_exécutés`, colonnes `Déchet Code`/`Qté à éliminer`) + 4 exports exutoires (déchets verts, OM extractions, tickets CS, tickets OM) |
+
+Pour créer une nouvelle variante : dupliquer le fichier le plus proche du
+besoin, puis adapter le bloc de configuration en haut du `<script>`
+(mapping des colonnes par source, table `normalizeFlux`, éventuel filtre
+client). Le reste du moteur (agrégation, rendu par jour/tournée, seuils
+d'écart) n'a normalement pas besoin d'être modifié.
+
 ## Fichiers sources
 
 Trois fichiers Excel importés côté client (aucune donnée n'est envoyée à un
