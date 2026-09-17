@@ -83,21 +83,10 @@
     background: var(--ok-bg); color: var(--ok);
     border-color: #a7f3d0;
   }
-  #btn-history {
-    font-size: 12px; font-weight: 500;
-    padding: 4px 10px; border-radius: 20px;
-    background: var(--surface-alt); color: var(--text);
-    border: 1px solid var(--border);
-    cursor: pointer; transition: all .15s;
-  }
-  #btn-history:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
-
-  /* ─── HISTORIQUE ─── */
-  #history-section { display: none; max-width: 1400px; margin: 24px auto 48px; padding: 0 20px; }
-  .history-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px;
-  }
+  /* ─── SUIVI QUALITÉ ─── */
+  /* #history-section porte déjà la classe .flux-panel (affichage, largeur,
+     fond, bordure) : on ne garde ici que le padding interne spécifique. */
+  .history-card { padding: 24px; }
   .history-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
   .history-card p.hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
   .history-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -210,7 +199,9 @@
   .btn-analyse:disabled { opacity: .4; cursor: not-allowed; }
 
   /* ─── RÉSULTATS ─── */
-  #results-section { display: none; padding: 0 20px 48px; }
+  /* Visible dès le chargement : l'onglet Suivi qualité doit rester
+     consultable même sans avoir encore chargé/analysé de fichiers. */
+  #results-section { padding: 0 20px 48px; }
 
   /* ─── ONGLETS FLUX ─── */
   .flux-tabs {
@@ -385,7 +376,6 @@
   <div class="header-icon">♻</div>
   <h1>Contrôle exutoire <span class="subtitle">— Coved La Riche</span></h1>
   <div class="header-spacer"></div>
-  <button id="btn-history" onclick="toggleHistoryPanel()">📊 Suivi qualité (<span id="history-count">0</span>)</button>
   <span id="status-badge">En attente de fichiers</span>
 </header>
 
@@ -445,23 +435,24 @@
 <div id="results-section">
   <div class="flux-tabs" id="flux-tabs"></div>
   <div id="flux-panels"></div>
-</div>
 
-<!-- ═══ SUIVI QUALITÉ (historique + statistiques) ═══ -->
-<div id="history-section">
-  <div class="history-card">
-    <h2>Suivi qualité des données</h2>
-    <p class="hint">Chaque clic sur « Analyser » enregistre un contrôle daté sur cet appareil (stockage local du navigateur, rien n'est envoyé ailleurs). Sert à suivre la qualité de la saisie SILEX dans le temps, flux par flux, plutôt que mois par mois isolément.</p>
-    <div class="history-toolbar">
-      <button class="btn-secondary" onclick="exportHistoryCsv()">⬇ Exporter en CSV</button>
-      <button class="btn-secondary btn-danger" onclick="clearHistory()">🗑 Vider l'historique</button>
+  <!-- Onglet fixe, jamais reconstruit par une analyse : suivi qualité /
+       historique des contrôles, consultable même sans fichier chargé. -->
+  <div id="history-section" class="flux-panel" data-tabkey="__quality__">
+    <div class="history-card">
+      <h2>Suivi qualité des données</h2>
+      <p class="hint">Chaque clic sur « Analyser » enregistre un contrôle daté sur cet appareil (stockage local du navigateur, rien n'est envoyé ailleurs). Sert à suivre la qualité de la saisie SILEX dans le temps, flux par flux, plutôt que mois par mois isolément.</p>
+      <div class="history-toolbar">
+        <button class="btn-secondary" onclick="exportHistoryCsv()">⬇ Exporter en CSV</button>
+        <button class="btn-secondary btn-danger" onclick="clearHistory()">🗑 Vider l'historique</button>
+      </div>
+
+      <div class="history-subheading">Statistiques par flux</div>
+      <div id="history-stats-wrap"></div>
+
+      <div class="history-subheading">Détail des contrôles</div>
+      <div id="history-table-wrap"></div>
     </div>
-
-    <div class="history-subheading">Statistiques par flux</div>
-    <div id="history-stats-wrap"></div>
-
-    <div class="history-subheading">Détail des contrôles</div>
-    <div id="history-table-wrap"></div>
   </div>
 </div>
 
@@ -826,6 +817,7 @@ function runAnalysis() {
       // ─── ONGLET ───
       const tab = document.createElement('button');
       tab.className = 'flux-tab' + (firstActive ? ' active' : '');
+      tab.dataset.tabkey = flux;
       tab.innerHTML = `
         <span class="tab-dot" style="background:${fluxColor[flux]}"></span>
         ${flux}
@@ -837,7 +829,7 @@ function runAnalysis() {
       // ─── PANNEAU ───
       const panel = document.createElement('div');
       panel.className = 'flux-panel' + (firstActive ? ' active' : '');
-      panel.id = `panel-${flux}`;
+      panel.dataset.tabkey = flux;
 
       // Barre KPI
       const ecartStr = globalEcart !== null
@@ -1018,8 +1010,9 @@ function runAnalysis() {
       firstActive = false;
     }
 
+    renderQualityTab(); // ré-ajoutée : tabsEl.innerHTML a été vidé plus haut
+
     document.getElementById('import-section').style.display = 'none';
-    document.getElementById('results-section').style.display = 'block';
     document.getElementById('status-badge').textContent = `${allFlux.size} flux analysés`;
 
     // Toutes les dates rencontrées (SILEX + exutoires), tous flux confondus,
@@ -1210,7 +1203,7 @@ function renderFluxStats(history) {
 
 function renderHistory() {
   const history = loadHistory();
-  const countEl = document.getElementById('history-count');
+  const countEl = document.querySelector('.flux-tab[data-tabkey="__quality__"] .tab-count');
   if (countEl) countEl.textContent = history.length;
 
   renderFluxStats(history);
@@ -1264,11 +1257,17 @@ function renderHistory() {
   `;
 }
 
-function toggleHistoryPanel() {
-  const sec = document.getElementById('history-section');
-  const isHidden = sec.style.display !== 'block';
-  sec.style.display = isHidden ? 'block' : 'none';
-  if (isHidden) renderHistory();
+// Onglet fixe (non reconstruit par runAnalysis) : à re-créer dans la barre
+// #flux-tabs à chaque fois qu'elle est vidée (page load + chaque analyse).
+function renderQualityTab() {
+  const tabsEl = document.getElementById('flux-tabs');
+  if (!tabsEl || tabsEl.querySelector('[data-tabkey="__quality__"]')) return;
+  const tab = document.createElement('button');
+  tab.className = 'flux-tab';
+  tab.dataset.tabkey = '__quality__';
+  tab.innerHTML = `📊 Suivi qualité <span class="tab-count">${loadHistory().length}</span>`;
+  tab.onclick = () => switchTab('__quality__');
+  tabsEl.appendChild(tab);
 }
 
 function csvEscape(v) {
@@ -1320,13 +1319,14 @@ function exportHistoryCsv() {
 // ─────────────────────────────────────────────────────
 //  UI HELPERS
 // ─────────────────────────────────────────────────────
-function switchTab(flux) {
-  document.querySelectorAll('.flux-tab').forEach((t, i) => {
-    t.classList.toggle('active', t.textContent.trim().startsWith(flux));
+function switchTab(key) {
+  document.querySelectorAll('.flux-tab').forEach(t => {
+    t.classList.toggle('active', t.dataset.tabkey === key);
   });
   document.querySelectorAll('.flux-panel').forEach(p => {
-    p.classList.toggle('active', p.id === `panel-${flux}`);
+    p.classList.toggle('active', p.dataset.tabkey === key);
   });
+  if (key === '__quality__') renderHistory();
 }
 
 function toggleDay(header) {
@@ -1340,8 +1340,11 @@ function showError(msg) {
   el.style.display = 'block';
 }
 
-// Affiche le nombre de contrôles déjà enregistrés dès l'ouverture de la page.
-document.getElementById('history-count').textContent = loadHistory().length;
+// Au chargement : l'onglet Suivi qualité existe et est actif dès le départ,
+// même avant tout import/analyse (aucun onglet flux n'existe encore).
+renderQualityTab();
+renderHistory();
+switchTab('__quality__');
 </script>
 </body>
 </html>

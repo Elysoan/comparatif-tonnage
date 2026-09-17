@@ -34,8 +34,10 @@ et, pour chaque flux, les KPIs (tonnage SILEX, tonnage exutoires, écart,
 jours en écart, tickets). Objectif : suivre dans le temps la qualité de la
 saisie SILEX, pas seulement le mois en cours.
 
-Le bouton **📊 Suivi qualité** (en-tête) ouvre un onglet dédié avec deux
-sections :
+**📊 Suivi qualité** est un onglet à part entière, au même niveau que les
+onglets par flux (CS-EMR, OM, ...) — toujours présent, même avant tout
+import/analyse, pour consulter l'historique sans avoir à recharger des
+fichiers. Il contient deux sections :
 
 - **Statistiques par flux** : nombre de contrôles, écart moyen, écart
   min → max, répartition ✓/⚠/✕ sur tout l'historique, dernier écart et
