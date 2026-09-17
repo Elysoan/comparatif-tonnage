@@ -505,9 +505,14 @@ const EXUTOIRE_SOURCES = [
     headerRow: 2, // ligne 1 vide, en-têtes en ligne 2
     cols: { date: 'Date Entrée', flux: 'Produit', tournee: 'Destination', tonnage: 'Poids' },
     unitDivisor: 1000,
-    // Le fichier mélange plusieurs agences Coved : on ne garde que La Riche.
-    clientCol: 'Client',
-    clientFilterValue: 'COVED - LA RICHE',
+    // Le fichier mélange les vidages "COVED - LA RICHE" et "COVED LOCHES" :
+    // les deux comptent pour ce contrôle (pas de filtre client). On préfixe
+    // la tournée par le client pour garder la traçabilité dans le détail.
+    tourneeFn: r => {
+      const client = r['Client'] ? String(r['Client']).trim() : '';
+      const dest = r['Destination'] ? String(r['Destination']).trim() : '';
+      return [client, dest].filter(Boolean).join(' — ');
+    },
   },
   {
     key: 'tickets-om',
@@ -669,7 +674,9 @@ function parseSource(key, rows) {
   return rows.flatMap(r => {
     const date = toDateStr(r[cfg.cols.date]);
     const flux = normalizeFlux(r[cfg.cols.flux]);
-    const tournee = r[cfg.cols.tournee] ? String(r[cfg.cols.tournee]).trim() : '';
+    const tournee = cfg.tourneeFn
+      ? cfg.tourneeFn(r)
+      : (r[cfg.cols.tournee] ? String(r[cfg.cols.tournee]).trim() : '');
     let tonnage = parseFloat(r[cfg.cols.tonnage]);
     if (isNaN(tonnage) || tonnage <= 0) return [];
     tonnage = tonnage / (cfg.unitDivisor || 1);
