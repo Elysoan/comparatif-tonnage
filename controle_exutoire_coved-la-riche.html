@@ -493,6 +493,11 @@ const EXUTOIRE_SOURCES = [
   },
 ];
 
+// Flux hors périmètre du contrôle : présents dans SILEX mais sans
+// contrepartie dans les 4 fichiers exutoires (toujours 100% d'écart,
+// non pertinent à afficher). Ajouter ici pour exclure un flux du recoupement.
+const EXCLUDED_FLUX = ['CS-CARTON', 'DIB'];
+
 const ALL_SOURCE_KEYS = ['silex', ...EXUTOIRE_SOURCES.map(s => s.key)];
 
 function getSourceConfig(key) {
@@ -645,7 +650,7 @@ function parseSource(key, rows) {
       if (clientVal !== cfg.clientFilterValue) return [];
     }
     return [{ date, flux, tournee, tonnage, source: key }];
-  }).filter(r => r.date && r.flux !== 'INCONNU');
+  }).filter(r => r.date && r.flux !== 'INCONNU' && !EXCLUDED_FLUX.includes(r.flux));
 }
 
 // ─────────────────────────────────────────────────────
