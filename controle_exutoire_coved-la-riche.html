@@ -520,7 +520,11 @@ function handleFile(key, input) {
   const reader = new FileReader();
   reader.onload = e => {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
+      // Pas de cellDates:true : dans cette version de SheetJS, la conversion
+      // en objets Date dépend du fuseau horaire du navigateur et peut décaler
+      // la date d'un jour (voir toDateStr). On lit les dates comme des
+      // numéros de série Excel bruts, convertis nous-mêmes de façon stable.
+      const wb = XLSX.read(e.target.result, { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
       // range: ligne (0-indexée) à partir de laquelle commencer la lecture ;
       // la première ligne de cette plage sert d'en-tête.
@@ -551,7 +555,10 @@ function checkReady() {
 function toDateStr(v) {
   if (!v) return null;
   if (v instanceof Date) {
-    return v.toISOString().slice(0, 10);
+    // Rare avec cellDates désactivé (voir handleFile) ; composants locaux en
+    // secours, moins fiables que la conversion par numéro de série ci-dessous.
+    const y = v.getFullYear(), m = v.getMonth() + 1, d = v.getDate();
+    return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
   }
   if (typeof v === 'string') {
     // formats: "2026-08-01", "01/08/2026", "2026-08-01T..."
