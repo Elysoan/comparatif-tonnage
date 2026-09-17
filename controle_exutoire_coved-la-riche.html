@@ -83,6 +83,33 @@
     background: var(--ok-bg); color: var(--ok);
     border-color: #a7f3d0;
   }
+  #btn-history {
+    font-size: 12px; font-weight: 500;
+    padding: 4px 10px; border-radius: 20px;
+    background: var(--surface-alt); color: var(--text);
+    border: 1px solid var(--border);
+    cursor: pointer; transition: all .15s;
+  }
+  #btn-history:hover { background: var(--accent-light); color: var(--accent); border-color: var(--accent); }
+
+  /* ─── HISTORIQUE ─── */
+  #history-section { display: none; max-width: 1400px; margin: 24px auto 48px; padding: 0 20px; }
+  .history-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); box-shadow: var(--shadow); padding: 24px;
+  }
+  .history-card h2 { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+  .history-card p.hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+  .history-toolbar { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .btn-secondary {
+    font-size: 12px; font-weight: 600; padding: 7px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); cursor: pointer;
+    transition: all .15s;
+  }
+  .btn-secondary:hover { background: var(--border-light); }
+  .btn-secondary.btn-danger { color: var(--error); border-color: #fca5a5; }
+  .btn-secondary.btn-danger:hover { background: var(--error-bg); }
+  .history-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
 
   /* ─── IMPORT ZONE ─── */
   #import-section {
@@ -335,6 +362,7 @@
   <div class="header-icon">♻</div>
   <h1>Contrôle exutoire <span class="subtitle">— Coved La Riche</span></h1>
   <div class="header-spacer"></div>
+  <button id="btn-history" onclick="toggleHistoryPanel()">🕘 Historique (<span id="history-count">0</span>)</button>
   <span id="status-badge">En attente de fichiers</span>
 </header>
 
@@ -394,6 +422,19 @@
 <div id="results-section">
   <div class="flux-tabs" id="flux-tabs"></div>
   <div id="flux-panels"></div>
+</div>
+
+<!-- ═══ HISTORIQUE DES CONTRÔLES ═══ -->
+<div id="history-section">
+  <div class="history-card">
+    <h2>Historique des contrôles</h2>
+    <p class="hint">Chaque clic sur « Analyser » enregistre un contrôle daté sur cet appareil (stockage local du navigateur, rien n'est envoyé ailleurs). Sert à suivre la qualité de la saisie SILEX dans le temps.</p>
+    <div class="history-toolbar">
+      <button class="btn-secondary" onclick="exportHistoryCsv()">⬇ Exporter en CSV</button>
+      <button class="btn-secondary btn-danger" onclick="clearHistory()">🗑 Vider l'historique</button>
+    </div>
+    <div id="history-table-wrap"></div>
+  </div>
 </div>
 
 <script>
@@ -662,6 +703,7 @@ function runAnalysis() {
 
     const silexRecords = parseSource('silex', store.silex);
     const aggSilex = aggregate(silexRecords);
+    const fluxSummaries = []; // pour l'historique des contrôles
 
     // Une agrégation par source exutoire (pour le détail/tickets),
     // + une agrégation combinée (pour le tonnage exutoire total).
@@ -728,6 +770,11 @@ function runAnalysis() {
 
       const globalEcart  = totalSilex > 0 ? (totalExut - totalSilex) / totalSilex * 100 : null;
       const globalClass  = ecartClass(totalSilex, totalExut);
+
+      fluxSummaries.push({
+        flux, totalSilex, totalExut, globalEcart, globalClass,
+        joursEcart, totalDays: sortedDates.length, totalTickets,
+      });
 
       // ─── ONGLET ───
       const tab = document.createElement('button');
@@ -928,10 +975,188 @@ function runAnalysis() {
     document.getElementById('results-section').style.display = 'block';
     document.getElementById('status-badge').textContent = `${allFlux.size} flux analysés`;
 
+    // Toutes les dates rencontrées (SILEX + exutoires), tous flux confondus,
+    // pour déduire la période couverte par ce contrôle.
+    const allDatesGlobal = new Set([
+      ...silexRecords.map(r => r.date),
+      ...allExutoireRecords.map(r => r.date),
+    ]);
+    saveHistoryEntry({
+      runAt: new Date().toISOString(),
+      periodLabel: periodLabelFromDates([...allDatesGlobal]),
+      fluxSummaries,
+    });
+    renderHistory();
+
   } catch(err) {
     showError('Erreur d\'analyse : ' + err.message);
     console.error(err);
   }
+}
+
+// ─────────────────────────────────────────────────────
+//  HISTORIQUE DES CONTRÔLES
+//  Stocké dans le navigateur (localStorage) : propre à cet appareil,
+//  ne quitte jamais le poste. Sert à suivre la qualité de la saisie
+//  SILEX dans le temps (un contrôle = un clic sur « Analyser »).
+// ─────────────────────────────────────────────────────
+const HISTORY_KEY = 'controle-exutoire-coved-la-riche:historique';
+const HISTORY_MAX_ENTRIES = 300;
+
+const MONTHS_FR = ['janvier','février','mars','avril','mai','juin','juillet',
+                    'août','septembre','octobre','novembre','décembre'];
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(err) {
+    console.error('Lecture historique impossible :', err);
+    return [];
+  }
+}
+
+function saveHistoryEntry(entry) {
+  try {
+    const history = loadHistory();
+    history.push(entry);
+    history.sort((a,b) => a.runAt.localeCompare(b.runAt));
+    while (history.length > HISTORY_MAX_ENTRIES) history.shift();
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  } catch(err) {
+    console.error('Sauvegarde historique impossible (quota / navigation privée ?) :', err);
+  }
+}
+
+function clearHistory() {
+  if (!confirm('Supprimer tout l\'historique des contrôles enregistré sur ce navigateur ? Cette action est irréversible.')) return;
+  try { localStorage.removeItem(HISTORY_KEY); } catch(err) {}
+  renderHistory();
+}
+
+function periodLabelFromDates(dates) {
+  if (dates.length === 0) return '—';
+  const sorted = [...dates].sort();
+  const min = sorted[0], max = sorted[sorted.length - 1];
+  const [minY, minM] = min.split('-');
+  const [maxY, maxM] = max.split('-');
+  if (minY === maxY && minM === maxM) {
+    return `${MONTHS_FR[parseInt(minM, 10) - 1]} ${minY}`;
+  }
+  return `${fmtDate(min)} → ${fmtDate(max)}`;
+}
+
+function fmtRunAt(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderHistory() {
+  const history = loadHistory();
+  const countEl = document.getElementById('history-count');
+  if (countEl) countEl.textContent = history.length;
+
+  const wrap = document.getElementById('history-table-wrap');
+  if (!wrap) return;
+
+  if (history.length === 0) {
+    wrap.innerHTML = '<div class="history-empty">Aucun contrôle enregistré pour l\'instant. Lance une analyse pour commencer l\'historique.</div>';
+    return;
+  }
+
+  let rowsHtml = '';
+  for (let i = history.length - 1; i >= 0; i--) {
+    const entry = history[i];
+    for (const fs of entry.fluxSummaries) {
+      const ecartStr = fs.globalEcart !== null
+        ? (fs.globalEcart >= 0 ? '+' : '') + fs.globalEcart.toFixed(1) + '%'
+        : '—';
+      rowsHtml += `
+        <tr>
+          <td>${fmtRunAt(entry.runAt)}</td>
+          <td>${entry.periodLabel}</td>
+          <td>${fs.flux}</td>
+          <td class="num">${fmtTon(fs.totalSilex)}</td>
+          <td class="num">${fmtTon(fs.totalExut)}</td>
+          <td class="num delta-cell ${fs.globalClass}">${ecartStr}</td>
+          <td class="num">${fs.joursEcart} / ${fs.totalDays}</td>
+        </tr>
+      `;
+    }
+  }
+
+  wrap.innerHTML = `
+    <div class="table-scroll">
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th>Contrôle effectué le</th>
+          <th>Période analysée</th>
+          <th>Flux</th>
+          <th class="num">SILEX (t)</th>
+          <th class="num">Exutoires (t)</th>
+          <th class="num">Écart</th>
+          <th class="num">Jours avec écart</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  `;
+}
+
+function toggleHistoryPanel() {
+  const sec = document.getElementById('history-section');
+  const isHidden = sec.style.display !== 'block';
+  sec.style.display = isHidden ? 'block' : 'none';
+  if (isHidden) renderHistory();
+}
+
+function csvEscape(v) {
+  const s = String(v ?? '');
+  // Séparateur = ";" (format CSV FR) : ne guillemeter que si la valeur le
+  // contient réellement, sinon Excel importe les tonnages comme du texte
+  // au lieu de nombres (la virgule décimale française est normale ici).
+  if (/[";\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+  return s;
+}
+
+function exportHistoryCsv() {
+  const history = loadHistory();
+  if (history.length === 0) { alert('Aucun historique à exporter.'); return; }
+
+  const header = ['Contrôle effectué le', 'Période analysée', 'Flux', 'SILEX (t)', 'Exutoires (t)',
+                   'Écart absolu (t)', 'Écart (%)', 'Jours avec écart', 'Jours analysés', 'Tickets de pesée'];
+  const lines = [header.map(csvEscape).join(';')];
+  for (let i = history.length - 1; i >= 0; i--) {
+    const entry = history[i];
+    for (const fs of entry.fluxSummaries) {
+      lines.push([
+        fmtRunAt(entry.runAt),
+        entry.periodLabel,
+        fs.flux,
+        fs.totalSilex.toFixed(3).replace('.', ','),
+        fs.totalExut.toFixed(3).replace('.', ','),
+        (fs.totalExut - fs.totalSilex).toFixed(3).replace('.', ','),
+        fs.globalEcart !== null ? fs.globalEcart.toFixed(1).replace('.', ',') : '',
+        fs.joursEcart,
+        fs.totalDays,
+        fs.totalTickets,
+      ].map(csvEscape).join(';'));
+    }
+  }
+
+  const csv = '﻿' + lines.join('\r\n'); // BOM : accents lisibles à l'ouverture Excel
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `historique-controle-exutoire-coved-la-riche_${new Date().toISOString().slice(0,10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ─────────────────────────────────────────────────────
@@ -956,6 +1181,9 @@ function showError(msg) {
   el.textContent = msg;
   el.style.display = 'block';
 }
+
+// Affiche le nombre de contrôles déjà enregistrés dès l'ouverture de la page.
+document.getElementById('history-count').textContent = loadHistory().length;
 </script>
 </body>
 </html>

@@ -26,6 +26,29 @@ besoin, puis adapter le bloc de configuration en haut du `<script>`
 client). Le reste du moteur (agrégation, rendu par jour/tournée, seuils
 d'écart) n'a normalement pas besoin d'être modifié.
 
+## Historique des contrôles (`controle_exutoire_coved-la-riche.html`)
+
+Chaque clic sur « Analyser » enregistre automatiquement un contrôle dans
+le `localStorage` du navigateur : date/heure du contrôle, période couverte
+et, pour chaque flux, les KPIs (tonnage SILEX, tonnage exutoires, écart,
+jours en écart, tickets). Objectif : suivre dans le temps la qualité de la
+saisie SILEX, pas seulement le mois en cours.
+
+- Le bouton **🕘 Historique** (en-tête) ouvre le tableau de tous les
+  contrôles passés, plus récents en premier.
+- **⬇ Exporter en CSV** télécharge l'historique complet (séparateur `;`,
+  décimales `,`, encodage compatible Excel FR) pour construire un rapport
+  ou un suivi qualité dans un tableur.
+- **🗑 Vider l'historique** efface définitivement les données stockées sur
+  cet appareil.
+
+Le stockage est local au navigateur/appareil (pas de serveur, rien n'est
+transmis) : changer de poste ou de navigateur démarre un nouvel
+historique. Cette fonctionnalité n'existe pour l'instant que sur la
+variante Coved La Riche — à répliquer sur `controle_exutoire.html` si
+besoin (le code est écrit pour être copié tel quel, seule la clé
+`HISTORY_KEY` doit changer).
+
 ## Fichiers sources
 
 Trois fichiers Excel importés côté client (aucune donnée n'est envoyée à un
@@ -128,4 +151,6 @@ dans les 3 fichiers).
 - Le recoupement par tournée est actuellement exact (matching string) —
   une tolérance ou un mapping tournée pourrait être ajouté si les
   libellés divergent entre SILEX et les exutoires.
-- Pas d'export pour l'instant (CSV ou Excel des écarts envisageable).
+- Export CSV disponible uniquement pour l'historique des contrôles
+  (variante Coved La Riche) — pas encore pour le détail jour/tournée
+  d'une analyse ponctuelle.
