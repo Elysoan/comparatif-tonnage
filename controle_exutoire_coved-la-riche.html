@@ -111,6 +111,29 @@
   .btn-secondary.btn-danger:hover { background: var(--error-bg); }
   .history-empty { text-align: center; padding: 32px; color: var(--text-muted); font-size: 13px; }
 
+  .history-subheading {
+    font-size: 12px; font-weight: 700; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .05em;
+    margin: 24px 0 10px;
+  }
+  .history-subheading:first-of-type { margin-top: 0; }
+
+  .status-pills { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; }
+  .status-pill {
+    font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 10px;
+  }
+  .status-pill.ok    { background: var(--ok-bg);   color: var(--ok); }
+  .status-pill.warn  { background: var(--warn-bg); color: var(--warn); }
+  .status-pill.error { background: var(--error-bg); color: var(--error); }
+
+  .trend-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 600;
+  }
+  .trend-badge.better { color: var(--ok); }
+  .trend-badge.worse  { color: var(--error); }
+  .trend-badge.stable { color: var(--text-muted); }
+
   /* ─── IMPORT ZONE ─── */
   #import-section {
     max-width: 1000px; margin: 32px auto; padding: 0 20px;
@@ -362,7 +385,7 @@
   <div class="header-icon">♻</div>
   <h1>Contrôle exutoire <span class="subtitle">— Coved La Riche</span></h1>
   <div class="header-spacer"></div>
-  <button id="btn-history" onclick="toggleHistoryPanel()">🕘 Historique (<span id="history-count">0</span>)</button>
+  <button id="btn-history" onclick="toggleHistoryPanel()">📊 Suivi qualité (<span id="history-count">0</span>)</button>
   <span id="status-badge">En attente de fichiers</span>
 </header>
 
@@ -424,15 +447,20 @@
   <div id="flux-panels"></div>
 </div>
 
-<!-- ═══ HISTORIQUE DES CONTRÔLES ═══ -->
+<!-- ═══ SUIVI QUALITÉ (historique + statistiques) ═══ -->
 <div id="history-section">
   <div class="history-card">
-    <h2>Historique des contrôles</h2>
-    <p class="hint">Chaque clic sur « Analyser » enregistre un contrôle daté sur cet appareil (stockage local du navigateur, rien n'est envoyé ailleurs). Sert à suivre la qualité de la saisie SILEX dans le temps.</p>
+    <h2>Suivi qualité des données</h2>
+    <p class="hint">Chaque clic sur « Analyser » enregistre un contrôle daté sur cet appareil (stockage local du navigateur, rien n'est envoyé ailleurs). Sert à suivre la qualité de la saisie SILEX dans le temps, flux par flux, plutôt que mois par mois isolément.</p>
     <div class="history-toolbar">
       <button class="btn-secondary" onclick="exportHistoryCsv()">⬇ Exporter en CSV</button>
       <button class="btn-secondary btn-danger" onclick="clearHistory()">🗑 Vider l'historique</button>
     </div>
+
+    <div class="history-subheading">Statistiques par flux</div>
+    <div id="history-stats-wrap"></div>
+
+    <div class="history-subheading">Détail des contrôles</div>
     <div id="history-table-wrap"></div>
   </div>
 </div>
@@ -1064,10 +1092,121 @@ function fmtRunAt(iso) {
   return d.toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Regroupe l'historique par flux, triés du plus ancien au plus récent.
+function groupHistoryByFlux(history) {
+  const byFlux = {};
+  for (const entry of history) {
+    for (const fs of entry.fluxSummaries) {
+      if (!byFlux[fs.flux]) byFlux[fs.flux] = [];
+      byFlux[fs.flux].push({ runAt: entry.runAt, periodLabel: entry.periodLabel, ...fs });
+    }
+  }
+  for (const arr of Object.values(byFlux)) arr.sort((a, b) => a.runAt.localeCompare(b.runAt));
+  return byFlux;
+}
+
+function computeFluxStats(history) {
+  const byFlux = groupHistoryByFlux(history);
+  const stats = {};
+  for (const [flux, arr] of Object.entries(byFlux)) {
+    const ecarts = arr.map(a => a.globalEcart).filter(e => e !== null);
+    const avgEcart = ecarts.length ? ecarts.reduce((s, e) => s + e, 0) / ecarts.length : null;
+    const avgAbsEcart = ecarts.length ? ecarts.reduce((s, e) => s + Math.abs(e), 0) / ecarts.length : null;
+    const minEcart = ecarts.length ? Math.min(...ecarts) : null;
+    const maxEcart = ecarts.length ? Math.max(...ecarts) : null;
+    const last = arr[arr.length - 1];
+    const prev = arr.length > 1 ? arr[arr.length - 2] : null;
+
+    let trend = null;
+    if (prev && last.globalEcart !== null && prev.globalEcart !== null) {
+      const diff = Math.abs(last.globalEcart) - Math.abs(prev.globalEcart);
+      trend = Math.abs(diff) < 0.5 ? 'stable' : (diff > 0 ? 'worse' : 'better');
+    }
+
+    stats[flux] = {
+      count: arr.length,
+      avgEcart, avgAbsEcart, minEcart, maxEcart, last, prev, trend,
+      okCount: arr.filter(a => a.globalClass === 'ok').length,
+      warnCount: arr.filter(a => a.globalClass === 'warn').length,
+      errorCount: arr.filter(a => a.globalClass === 'error').length,
+    };
+  }
+  return stats;
+}
+
+function fmtPct(v) {
+  if (v === null || v === undefined || isNaN(v)) return '—';
+  return (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+}
+
+function trendBadge(trend) {
+  if (trend === 'better') return '<span class="trend-badge better">▼ en amélioration</span>';
+  if (trend === 'worse')  return '<span class="trend-badge worse">▲ en dégradation</span>';
+  if (trend === 'stable') return '<span class="trend-badge stable">▬ stable</span>';
+  return '<span class="trend-badge stable">—</span>';
+}
+
+function renderFluxStats(history) {
+  const wrap = document.getElementById('history-stats-wrap');
+  if (!wrap) return;
+
+  if (history.length === 0) {
+    wrap.innerHTML = '<div class="history-empty">Pas encore de statistiques : lance au moins un contrôle.</div>';
+    return;
+  }
+
+  const stats = computeFluxStats(history);
+  let rowsHtml = '';
+  for (const flux of Object.keys(stats).sort()) {
+    const s = stats[flux];
+    const lastEcartStr = s.last.globalEcart !== null
+      ? (s.last.globalEcart >= 0 ? '+' : '') + s.last.globalEcart.toFixed(1) + '%'
+      : '—';
+    rowsHtml += `
+      <tr>
+        <td>${flux}</td>
+        <td class="num">${s.count}</td>
+        <td class="num">${fmtPct(s.avgEcart)}</td>
+        <td class="num">${fmtPct(s.minEcart)} → ${fmtPct(s.maxEcart)}</td>
+        <td>
+          <span class="status-pills">
+            <span class="status-pill ok">✓ ${s.okCount}</span>
+            <span class="status-pill warn">⚠ ${s.warnCount}</span>
+            <span class="status-pill error">✕ ${s.errorCount}</span>
+          </span>
+        </td>
+        <td class="num delta-cell ${s.last.globalClass}">${lastEcartStr}<br><span style="font-size:10px;color:var(--text-muted);font-weight:400;">${s.last.periodLabel}</span></td>
+        <td>${trendBadge(s.trend)}</td>
+      </tr>
+    `;
+  }
+
+  wrap.innerHTML = `
+    <div class="table-scroll">
+    <table class="detail-table">
+      <thead>
+        <tr>
+          <th>Flux</th>
+          <th class="num">Contrôles</th>
+          <th class="num">Écart moyen</th>
+          <th class="num">Écart min → max</th>
+          <th>Répartition</th>
+          <th class="num">Dernier écart</th>
+          <th>Tendance</th>
+        </tr>
+      </thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+    </div>
+  `;
+}
+
 function renderHistory() {
   const history = loadHistory();
   const countEl = document.getElementById('history-count');
   if (countEl) countEl.textContent = history.length;
+
+  renderFluxStats(history);
 
   const wrap = document.getElementById('history-table-wrap');
   if (!wrap) return;

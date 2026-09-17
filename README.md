@@ -26,7 +26,7 @@ besoin, puis adapter le bloc de configuration en haut du `<script>`
 client). Le reste du moteur (agrégation, rendu par jour/tournée, seuils
 d'écart) n'a normalement pas besoin d'être modifié.
 
-## Historique des contrôles (`controle_exutoire_coved-la-riche.html`)
+## Suivi qualité / historique des contrôles (`controle_exutoire_coved-la-riche.html`)
 
 Chaque clic sur « Analyser » enregistre automatiquement un contrôle dans
 le `localStorage` du navigateur : date/heure du contrôle, période couverte
@@ -34,9 +34,18 @@ et, pour chaque flux, les KPIs (tonnage SILEX, tonnage exutoires, écart,
 jours en écart, tickets). Objectif : suivre dans le temps la qualité de la
 saisie SILEX, pas seulement le mois en cours.
 
-- Le bouton **🕘 Historique** (en-tête) ouvre le tableau de tous les
-  contrôles passés, plus récents en premier.
-- **⬇ Exporter en CSV** télécharge l'historique complet (séparateur `;`,
+Le bouton **📊 Suivi qualité** (en-tête) ouvre un onglet dédié avec deux
+sections :
+
+- **Statistiques par flux** : nombre de contrôles, écart moyen, écart
+  min → max, répartition ✓/⚠/✕ sur tout l'historique, dernier écart et
+  tendance (comparaison au contrôle précédent, en amélioration / stable /
+  en dégradation).
+- **Détail des contrôles** : tableau chronologique de tous les contrôles
+  passés, plus récents en premier.
+
+Deux actions sur cet onglet :
+- **⬇ Exporter en CSV** télécharge l'historique détaillé (séparateur `;`,
   décimales `,`, encodage compatible Excel FR) pour construire un rapport
   ou un suivi qualité dans un tableur.
 - **🗑 Vider l'historique** efface définitivement les données stockées sur
